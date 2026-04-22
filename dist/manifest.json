@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Torrent Scraper",
+  "version": "2.0",
+  "permissions": ["activeTab", "storage", "downloads", "scripting"],
+  "host_permissions": ["<all_urls>"],
+
+  "action": {
+    "default_popup": "popup.html"
+  },
+
+  "options_page": "review.html",
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
