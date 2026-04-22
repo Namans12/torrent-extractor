@@ -40,7 +40,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     `).join("");
 
   document.getElementById("export").onclick = async () => {
-    await chrome.runtime.sendMessage({ type: "EXPORT" });
+    const response = await chrome.runtime.sendMessage({ type: "EXPORT" });
+
+    if (!response?.ok) {
+      alert(response?.error || "Export failed");
+    }
   };
 
 });

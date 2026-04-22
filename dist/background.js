@@ -76,9 +76,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         );
 
         const csv = [headers.join(","), ...csvRows].join("\n");
-
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
+        const url = `data:text/csv;charset=utf-8,${encodeURIComponent("\uFEFF" + csv)}`;
 
         await chrome.downloads.download({
           url,
