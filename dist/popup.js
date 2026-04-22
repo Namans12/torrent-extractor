@@ -1,3 +1,8 @@
+if (window.__TGX_ALREADY__) {
+  console.log("Already injected");
+} else {
+  window.__TGX_ALREADY__ = true;
+
 document.addEventListener("DOMContentLoaded", () => {
 
   async function getTab() {
@@ -19,10 +24,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
+      // 🔥 ALWAYS inject fresh
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"]
+      });
+
+      // small delay to ensure load
+      await new Promise(r => setTimeout(r, 200));
+
       await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE" });
+
     } catch (e) {
-      console.error("Message failed:", e);
-      alert("Content script not responding. Reload page.");
+      console.error("Injection failed:", e);
+      alert("Failed to start scraper. Refresh page.");
     }
   };
 
@@ -36,3 +51,4 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
 });
+}

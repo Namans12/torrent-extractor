@@ -1,137 +1,56 @@
-// ✅ Always attach listener (NO guards)
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "SCRAPE") {
-    console.log("SCRAPE triggered");
-    enableSelection();
-  }
-});
+if (!window.__TGX_ALREADY__) {
+  window.__TGX_ALREADY__ = true;
 
-let startX, startY, box;
-
-function enableSelection() {
-  console.log("Selection enabled");
-
-  document.body.style.cursor = "crosshair";
-
-  document.addEventListener("mousedown", onMouseDown, { once: true });
-}
-
-function onMouseDown(e) {
-  startX = e.clientX;
-  startY = e.clientY;
-
-  box = document.createElement("div");
-
-  Object.assign(box.style, {
-    position: "fixed",
-    border: "2px dashed red",
-    background: "rgba(255,0,0,0.1)",
-    zIndex: 999999
-  });
-
-  document.body.appendChild(box);
-
-  document.addEventListener("mousemove", onMouseMove);
-  document.addEventListener("mouseup", onMouseUp);
-}
-
-function onMouseMove(e) {
-  const x = Math.min(e.clientX, startX);
-  const y = Math.min(e.clientY, startY);
-  const w = Math.abs(e.clientX - startX);
-  const h = Math.abs(e.clientY - startY);
-
-  Object.assign(box.style, {
-    left: x + "px",
-    top: y + "px",
-    width: w + "px",
-    height: h + "px"
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === "SCRAPE") {
+      console.log("SCRAPE triggered");
+      scrapePage();
+    }
   });
 }
 
-function onMouseUp(e) {
-  document.removeEventListener("mousemove", onMouseMove);
-  document.removeEventListener("mouseup", onMouseUp);
+async function scrapePage() {
+  const links = [...document.querySelectorAll('a[href*="/post-detail/"]')];
 
-  document.body.style.cursor = "default";
-
-  const rect = box.getBoundingClientRect();
-  box.remove();
-
-  const elements = document.elementsFromPoint(
-    rect.left + 5,
-    rect.top + 5
-  );
-
-  const container = elements.find(el =>
-    el.querySelectorAll && el.querySelectorAll("a").length > 20
-  );
-
-  if (!container) {
-    alert("No valid area selected");
+  if (!links.length) {
+    alert("No torrent rows found");
     return;
   }
 
-  scrapeRows(container);
-}
-
-async function scrapeRows(container) {
   const rows = [];
+  const seen = new Set();
 
-  const all = container.querySelectorAll("div, tr");
+  for (const linkEl of links) {
+    const name = linkEl.innerText.trim();
+    const link = new URL(linkEl.getAttribute("href"), location.href).href;
 
-  for (const row of all) {
-    const links = row.querySelectorAll("a");
-    if (!links.length) continue;
+    if (!name || name.length < 4 || seen.has(link)) {
+      continue;
+    }
 
-    let nameEl = null;
-    let maxLen = 0;
+    const container = linkEl.closest("tr, li, article, section, div") || linkEl.parentElement;
+    const text = (container?.innerText || "").replace(/\s+/g, " ").trim();
 
-    links.forEach(a => {
-      const t = a.innerText.trim();
-      if (t.length > maxLen) {
-        maxLen = t;
-        nameEl = a;
-      }
-    });
+    const size = text.match(/\b\d+(?:\.\d+)?\s?(?:TB|GB|MB|KB)\b/i)?.[0] || "";
+    const added = text.match(/\b(?:\d+\s(?:day|days|week|weeks|month|months|hour|hours)|today|yesterday)(?:,\s*\d+\s(?:day|days|week|weeks|month|months|hour|hours))?\b/i)?.[0] || "";
 
-    if (!nameEl || maxLen < 12) continue;
+    if (!size && !added && !text.includes(name)) {
+      continue;
+    }
 
-    const link = nameEl.href;
-
-    if (
-      link.includes("user") ||
-      link.includes("imdb") ||
-      link.includes("get-posts")
-    ) continue;
-
-    const name = nameEl.innerText.trim();
-
-    const size =
-      row.innerText.match(/(\d+(\.\d+)?\s?(GB|MB))/i)?.[0] || "";
-
-    const added =
-      row.innerText.match(/(\d+\s+(days?|weeks?|months?))/i)?.[0] || "";
-
+    seen.add(link);
     rows.push({ name, link, size, added });
   }
 
-  const unique = new Map();
-  rows.forEach(r => unique.set(r.link, r));
-  const clean = [...unique.values()];
-
-  console.log("Rows found:", clean.length);
-
   const final = await Promise.allSettled(
-    clean.map(async row => {
+    rows.map(async (row) => {
       try {
-        const res = await fetch(row.link);
+        const res = await fetch(row.link, { credentials: "include" });
         const html = await res.text();
         const doc = new DOMParser().parseFromString(html, "text/html");
 
-        const magnet =
-          [...doc.querySelectorAll("a")]
-            .find(a => a.href.startsWith("magnet:"))?.href || "";
+        const magnet = [...doc.querySelectorAll("a")]
+          .find((a) => a.href.startsWith("magnet:"))?.href || "";
 
         return { ...row, magnet };
       } catch {
@@ -141,8 +60,13 @@ async function scrapeRows(container) {
   );
 
   const result = final
-    .filter(r => r.status === "fulfilled")
-    .map(r => r.value);
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  if (!result.length) {
+    alert("No valid rows found");
+    return;
+  }
 
   chrome.runtime.sendMessage({ type: "SAVE", rows: result });
 

@@ -47,24 +47,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const headers = ["name", "size", "added", "magnet", "link"];
 
         const escapeCSV = (val) => {
-          return `"${String(val).replace(/"/g, '""')}"`;
+          // do NOT wrap formulas in quotes
+            if (val.startsWith("=HYPERLINK")) {
+              return val;
+            }
+
+            return `"${String(val).replace(/"/g, '""')}"`;
         };
 
         const csvRows = data.map(r =>
           headers.map(h => {
             let val = r[h] || "";
 
-            // Clickable magnet
-            if (h === "magnet" && val) {
+            if (h === "magnet" && val.startsWith("magnet:")) {
               val = `=HYPERLINK("${val}","Open Magnet")`;
             }
 
-            // Clickable page link
-            if (h === "link" && val) {
+            if (h === "link" && val.startsWith("http")) {
               val = `=HYPERLINK("${val}","View Page")`;
             }
 
-            return escapeCSV(val);
+            if (val.startsWith("=HYPERLINK")) {
+              return val;
+            }
+
+            return `"${String(val).replace(/"/g, '""')}"`;
           }).join(",")
         );
 
